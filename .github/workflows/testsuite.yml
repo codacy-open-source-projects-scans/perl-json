@@ -1,0 +1,192 @@
+name: testsuite
+
+on:
+  push:
+    branches:
+      - "*"
+    tags-ignore:
+      - "*"
+  pull_request:
+
+jobs:
+
+  ubuntu:
+    env:
+      PERL_USE_UNSAFE_INC: 0
+      AUTHOR_TESTING: 1
+      AUTOMATED_TESTING: 1
+      RELEASE_TESTING: 1
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v1
+      - name: perl -V
+        run: perl -V
+      - name: Makefile.PL
+        run: perl -I$(pwd) Makefile.PL
+      - name: make test
+        run: make test
+      - name: prove xt
+        run: prove -b xt
+
+  linux:
+    name: "linux ${{ matrix.perl-version }}"
+    needs: [ubuntu]
+    env:
+      PERL_USE_UNSAFE_INC: 0
+      AUTHOR_TESTING: 1
+      AUTOMATED_TESTING: 1
+      RELEASE_TESTING: 1
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+            - backend: JSON::backportPP
+              backend-version: 0
+              perl-version: latest
+            - backend: JSON::XS
+              backend-version: 4.00
+              perl-version: latest
+            - backend: JSON::XS
+              backend-version: 3.02
+              perl-version: latest
+            - backend: JSON::XS
+              backend-version: 2.34
+              perl-version: latest
+            - backend: JSON::PP
+              backend-version: 2.97001
+              perl-version: latest
+            - backend: JSON::PP
+              backend-version: 2.27400
+              perl-version: latest
+            - backend: JSON::PP
+              backend-version: 2.27101
+              perl-version: latest
+            - backend: Cpanel::JSON::XS
+              backend-version: 4.32
+              perl-version: latest
+            - backend: Cpanel::JSON::XS
+              backend-version: 4.08
+              perl-version: latest
+            - backend: Cpanel::JSON::XS
+              backend-version: 3.0218
+              perl-version: latest
+            - backend: JSON::XS
+              backend-version: 4.00
+              perl-version: 5.8
+            - backend: JSON::XS
+              backend-version: 3.02
+              perl-version: 5.8
+            - backend: JSON::XS
+              backend-version: 2.34
+              perl-version: 5.8
+            - backend: JSON::PP
+              backend-version: 2.97001
+              perl-version: 5.8
+            - backend: JSON::PP
+              backend-version: 2.27400
+              perl-version: 5.8
+            - backend: JSON::PP
+              backend-version: 2.27101
+              perl-version: 5.8
+            - backend: Cpanel::JSON::XS
+              backend-version: 0
+              perl-version: 5.8
+            - backend: Cpanel::JSON::XS
+              backend-version: 4.32
+              perl-version: 5.8
+            - backend: Cpanel::JSON::XS
+              backend-version: 4.08
+              perl-version: 5.8
+            - backend: Cpanel::JSON::XS
+              backend-version: 3.0218
+              perl-version: 5.8
+
+    container:
+      image: perl:${{ matrix.perl-version }}
+
+    steps:
+      - uses: actions/checkout@v1
+      - name: perl -V
+        run: perl -V; echo "${{ matrix.backend }}"; echo "${{ matrix.backend-version }}"
+      - name: install backend
+        if: ${{ matrix.backend-version != '0' && matrix.backend != 'JSON::backportPP' }}
+        run: cpanm -n ${{ matrix.backend }}@${{ matrix.backend-version }}
+      - name: install backend2
+        if: ${{ matrix.backend-version == '0' && matrix.backend != 'JSON::backportPP' }}
+        run: cpanm -n ${{ matrix.backend }}
+      - name: Makefile.PL
+        run: perl -I$(pwd) Makefile.PL
+      - name: make test
+        run: PERL_JSON_BACKEND=${{ matrix.backend }} make test
+      - name: load JSON after backend
+        if: ${{ matrix.backend == 'Cpanel::JSON::XS' || matrix.backend == 'JSON::XS' }}
+        run: cpanm -n Test::Warnings JSON::PP@4.12; perl -Ilib -we 'use Test::More; use Test::Warnings qw(:report_warnings); use ${{ matrix.backend }} (); use JSON (); done_testing'
+      - name: load JSON before backend
+        continue-on-error: true
+        if: ${{ matrix.backend == 'Cpanel::JSON::XS' || matrix.backend == 'JSON::XS' }}
+        run: cpanm -n Test::Warnings JSON::PP@4.12; perl -Ilib -we 'use Test::More; use Test::Warnings qw(:report_warnings); use JSON (); use ${{ matrix.backend }} (); done_testing'
+      - name: load JSON::backportPP after backend
+        if: ${{ matrix.backend == 'Cpanel::JSON::XS' || matrix.backend == 'JSON::XS' }}
+        run: cpanm -n Test::Warnings; perl -Ilib -we 'use Test::More; use Test::Warnings qw(:report_warnings); use ${{ matrix.backend }} (); use JSON::backportPP (); done_testing'
+      - name: load JSON::backportPP before backend
+        continue-on-error: true
+        if: ${{ matrix.backend == 'Cpanel::JSON::XS' || matrix.backend == 'JSON::XS' }}
+        run: cpanm -n Test::Warnings; perl -Ilib -we 'use Test::More; use Test::Warnings qw(:report_warnings); use JSON::backportPP (); use ${{ matrix.backend }} (); done_testing'
+
+
+  macOS:
+    needs: [ubuntu]
+    env:
+      PERL_USE_UNSAFE_INC: 0
+      AUTHOR_TESTING: 1
+      AUTOMATED_TESTING: 1
+      RELEASE_TESTING: 1
+
+    runs-on: macOS-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        perl-version: [latest]
+
+    steps:
+      - uses: actions/checkout@v1
+      - name: perl -V
+        run: perl -V
+      - name: Makefile.PL
+        run: perl -I$(pwd) Makefile.PL
+      - name: make test
+        run: make test
+
+  # windows:
+  #   needs: [ubuntu]
+  #   env:
+  #     PERL_USE_UNSAFE_INC: 0
+  #     AUTHOR_TESTING: 0
+  #     AUTOMATED_TESTING: 1
+  #     RELEASE_TESTING: 0
+
+  #   runs-on: windows-latest
+
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       perl-version: [latest]
+
+  #   steps:
+  #     - uses: actions/checkout@master
+  #     - name: Set up Perl
+  #       run: |
+  #         choco install strawberryperl
+  #         echo "##[add-path]C:\strawberry\c\bin;C:\strawberry\perl\site\bin;C:\strawberry\perl\bin"
+  #     - name: perl -V
+  #       run: perl -V
+  #     - name: Makefile.PL
+  #       run: perl -I Makefile.PL
+  #     - name: make test
+  #       run: make test
